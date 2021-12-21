@@ -1,0 +1,149 @@
+#pragma once
+
+#include <assimp/Importer.hpp>
+#include <assimp/matrix4x4.h>
+#include <assimp/postprocess.h>
+#include <assimp/scene.h>
+#include <assimp/vector3.h>
+#include <glad/glad.h>
+#include <GLFW/glfw3.h>
+
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtx/quaternion.hpp>
+#include <glm/gtc/type_ptr.hpp>
+
+#include "utils.h"
+#include "animation.h"
+
+#include "bone.h"
+#include "texture.h"
+#include "vao.h"
+#include "keyframe.h"
+#include "shader.h"
+
+static Vao createVertexArrayGPU(std::vector<Vertex>& vertices, std::vector<GLuint> indices) {
+    Vao vao(true);
+
+    GLuint& vboId = vao.vboId();
+    GLuint& eboId = vao.eboId();
+    glGenBuffers(1, &vboId);
+
+    glBindBuffer(GL_ARRAY_BUFFER, vboId);
+
+    glBufferData(GL_ARRAY_BUFFER, sizeof(Vertex) * vertices.size(), &vertices[0], GL_STATIC_DRAW);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (GLvoid*)offsetof(Vertex, position));
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (GLvoid*)offsetof(Vertex, normal));
+    glEnableVertexAttribArray(2);
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (GLvoid*)offsetof(Vertex, uv));
+    glEnableVertexAttribArray(3);
+    glVertexAttribIPointer(3, 4, GL_INT, sizeof(Vertex), (GLvoid*)offsetof(Vertex, boneIds));
+    glEnableVertexAttribArray(4);
+    glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex), (GLvoid*)offsetof(Vertex, boneWeights));
+
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, eboId);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(GLuint), &indices[0], GL_STATIC_DRAW);
+    
+    vao.setVertexCount(indices.size());
+    vao.unbind();
+
+    return vao;
+}
+
+static void getPoseGPU(Animation& animation, Bone& bone, float animationTime, std::vector<glm::mat4>& output, glm::mat4& parentTransform, glm::mat4& globalInverseTransform) {
+    animationTime = fmod(animationTime, animation.duration());
+    std::vector<KeyFrame> keyFrames = animation.getBoneKeyFrames(bone.name());
+    glm::mat4 globalTransform = parentTransform;
+    if (!keyFrames.empty())
+    {
+        unsigned int currentKeyFrameIdx;
+        for (unsigned int index = 0; index < keyFrames.size() - 1; ++index)
+        {
+            if (animationTime < keyFrames[index + 1].timeStamp)
+            {
+                currentKeyFrameIdx = index;
+                break;
+            }
+        }
+        KeyFrame currentKeyFrame = keyFrames[currentKeyFrameIdx];
+        KeyFrame nextKeyFrame = keyFrames[(currentKeyFrameIdx + 1) % keyFrames.size()];
+        float timeStamp1 = currentKeyFrame.timeStamp;
+        float timeStamp2 = nextKeyFrame.timeStamp;
+        float progression = (animationTime - timeStamp1) / (timeStamp2 - timeStamp1);
+
+        Transformation newTransform = Transformation::interpolate(currentKeyFrame.transform, nextKeyFrame.transform, progression);
+
+        globalTransform = parentTransform * newTransform.toTransformMatrix();
+    }
+    output[bone.id()] = globalInverseTransform * globalTransform * bone.offset();
+
+    for (Bone& child : bone.children()) {
+        getPoseGPU(animation, child, animationTime, output, globalTransform, globalInverseTransform);
+    }
+}
+
+static void GPULoop(float time, FreeCamera camera, AnimPackage& anim)
+{
+    glm::mat4 identity(1.0);
+
+    std::vector<glm::mat4> currentPose;
+    currentPose.resize(anim.boneCount, identity);
+
+    getPoseGPU(anim.animation, anim.skeleton, time, currentPose, identity, anim.globalInvTr);
+
+    glm::mat4 projectionMatrix = glm::perspective(glm::radians(camera._zoom), ((float) WIDTH / HEIGHT), 0.01f, 100.0f);
+    glm::mat4 viewMatrix = camera.view_matrix();
+    glm::mat4 viewProjectionMatrix = projectionMatrix * viewMatrix;
+
+    glClearColor(0.f, 0.f, 0.f, 1.f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    anim.shader.start();
+
+
+    glm::mat4 modelMatrix = glm::mat4(1.0f);
+    modelMatrix = glm::translate(modelMatrix, glm::vec3(0.0f, 1.0f, 0.0f));
+    //modelMatrix = glm::scale(modelMatrix, glm::vec3(.2f, .2f, .2f));
+
+    anim.shader.loadMatrix4("view_projection_matrix", glm::value_ptr(viewProjectionMatrix));
+    anim.shader.loadMatrix4("model_matrix", glm::value_ptr(modelMatrix));
+    anim.shader.loadMatrix4("bone_transforms", glm::value_ptr(currentPose[0]), GLsizei(anim.boneCount));
+
+    glActiveTexture(GL_TEXTURE0);
+    anim.texture.load();
+
+    anim.vao.bind();
+    glDrawElements(GL_TRIANGLES, anim.vao.getVertexCount(), GL_UNSIGNED_INT, 0);
+    anim.vao.unbind();
+    anim.shader.stop();
+}
+
+static AnimPackage initGPU(const aiScene* scene, aiMesh* mesh)
+{
+    std::cout << "Init anim on GPU" << std::endl;
+
+    std::vector<Vertex> vertices = {};
+    std::vector<GLuint> indices = {};
+    GLuint boneCount = 0;
+    Animation animation;
+    Bone skeleton;
+
+    glm::mat4 globalInverseTransform = assimpToGlmMatrix(scene->mRootNode->mTransformation);
+    globalInverseTransform = glm::inverse(globalInverseTransform);
+   
+    loadModel(scene, mesh, vertices, indices, skeleton, boneCount);
+    loadAnimation(scene, skeleton, animation);
+
+    Vao vao = createVertexArrayGPU(vertices, indices);
+    
+    Texture diffuseTexture = Texture("diffuse.png");
+
+    Shader shader("V_shader.glsl", "F_shader.glsl");
+
+    shader.start();
+    shader.loadInt("diff_texture", 0);
+    shader.stop();
+
+    return AnimPackage(shader, vao, diffuseTexture, animation, skeleton, boneCount, globalInverseTransform);
+}

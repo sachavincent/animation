@@ -5,7 +5,7 @@
 #include <vector>
 #include <glm/common.hpp>
 #include <iostream>
-#include "glitter.h"
+#include <glad/glad.h>
 
 class Texture
 {

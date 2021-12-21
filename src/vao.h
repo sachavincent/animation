@@ -1,7 +1,7 @@
 #ifndef VAO_H
 #define VAO_H
 
-#include "glitter.h"
+#include <glad/glad.h>
 #include <vector>
 
 class Vao
@@ -20,7 +20,7 @@ public:
     inline int getVertexCount() { return this->_vertexCount; }
 
     inline GLuint& vboId() { return this->_vboId; }
-
+    
     inline GLuint& eboId() { return this->_eboId; }
 
     inline const bool& useEBO() const { return this->_useEBO; }

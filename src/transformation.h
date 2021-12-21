@@ -2,9 +2,10 @@
 #define TRANSFORMATION_H
 
 #include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtc/quaternion.hpp>
 #include <glm/gtx/quaternion.hpp>
+#include <glm/gtx/dual_quaternion.hpp>
+#include <glm/gtc/type_ptr.hpp>
 
 class Transformation
 {
@@ -21,6 +22,8 @@ public:
     inline glm::vec3& scale() { return _scale; }
 
     glm::mat4 toTransformMatrix();
+
+    glm::fdualquat toDualQuat();
 
     /*
     * Interpolate 2 transformations based on the progression value (between 0 and 1)
