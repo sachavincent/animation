@@ -151,11 +151,18 @@ int main()
         exit(1);
     }
 
+    Texture diffuseTexture = Texture("diffuse.png");
+
     aiMesh* mesh = scene->mMeshes[0];
 
-	AnimPackage DualGPUAnim = initDualGPU(scene, mesh);
 	AnimPackage CPUAnim = initCPU(scene, mesh);
+    CPUAnim.texture = diffuseTexture;
+
 	AnimPackage GPUAnim = initGPU(scene, mesh);
+    GPUAnim.texture = diffuseTexture;
+
+	AnimPackage DualGPUAnim = initDualGPU(scene, mesh);
+    DualGPUAnim.texture = diffuseTexture;
 
     float start_time = float(glfwGetTime());
     while (!glfwWindowShouldClose(window))

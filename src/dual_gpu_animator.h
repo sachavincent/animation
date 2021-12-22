@@ -17,7 +17,6 @@
 #include "animation.h"
 
 #include "bone.h"
-#include "texture.h"
 #include "vao.h"
 #include "keyframe.h"
 #include "shader.h"
@@ -75,7 +74,10 @@ static void getPoseDual(Animation& animation, Bone& bone, float animationTime, s
         float timeStamp1 = currentKeyFrame.timeStamp;
         float timeStamp2 = nextKeyFrame.timeStamp;
         float progression = (animationTime - timeStamp1) / (timeStamp2 - timeStamp1);
-
+        if (timeStamp1 > animationTime)
+        {
+            progression = 0; // Happens when first timeStamp > 0
+        }
         Transformation newTransform = Transformation::interpolate(currentKeyFrame.transform, nextKeyFrame.transform, progression);
 
         globalTransformQuat = glm::normalize(parentTransform * newTransform.toDualQuat());
@@ -154,13 +156,11 @@ static AnimPackage initDualGPU(const aiScene* scene, aiMesh* mesh)
 
     Vao vao = createVertexArrayDual(vertices, indices);
     
-    Texture diffuseTexture = Texture("diffuse.png");
-
     Shader shader("V_dual_shader.glsl", "F_shader.glsl");
 
     shader.start();
     shader.loadInt("diff_texture", 0);
     shader.stop();
 
-    return AnimPackage(shader, vao, diffuseTexture, animation, skeleton, boneCount);
+    return AnimPackage(shader, vao, animation, skeleton, boneCount);
 }

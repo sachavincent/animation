@@ -17,7 +17,6 @@
 #include "animation.h"
 
 #include "bone.h"
-#include "texture.h"
 #include "vao.h"
 #include "keyframe.h"
 #include "shader.h"
@@ -86,7 +85,10 @@ static void getPoseCPU(Animation& animation, Bone& bone, float animationTime, st
         float timeStamp1 = currentKeyFrame.timeStamp;
         float timeStamp2 = nextKeyFrame.timeStamp;
         float progression = (animationTime - timeStamp1) / (timeStamp2 - timeStamp1);
-
+        if (timeStamp1 > animationTime)
+        {
+            progression = 0; // Happens when first timeStamp > 0
+        }
         Transformation newTransform = Transformation::interpolate(currentKeyFrame.transform, nextKeyFrame.transform, progression);
 
         globalTransform = parentTransform * newTransform.toTransformMatrix();
@@ -189,7 +191,6 @@ static AnimPackage initCPU(const aiScene* scene, aiMesh* mesh)
     loadAnimation(scene, skeleton, animation);
 
     Vao vao = createVertexArrayCPU(verticesCPU, indices);
-    Texture diffuseTexture = Texture("diffuse.png");
 
     Shader shader("V_cpu_shader.glsl", "F_shader.glsl");
     
@@ -197,5 +198,5 @@ static AnimPackage initCPU(const aiScene* scene, aiMesh* mesh)
     shader.loadInt("diff_texture", 0);
     shader.stop();
 
-    return AnimPackage(shader, vao, diffuseTexture, animation, skeleton, boneCount, globalInverseTransform);
+    return AnimPackage(shader, vao, animation, skeleton, boneCount, globalInverseTransform);
 }

@@ -17,7 +17,6 @@
 #include "animation.h"
 
 #include "bone.h"
-#include "texture.h"
 #include "vao.h"
 #include "keyframe.h"
 #include "shader.h"
@@ -58,7 +57,7 @@ static void getPoseGPU(Animation& animation, Bone& bone, float animationTime, st
     glm::mat4 globalTransform = parentTransform;
     if (!keyFrames.empty())
     {
-        unsigned int currentKeyFrameIdx;
+        unsigned int currentKeyFrameIdx = 0;
         for (unsigned int index = 0; index < keyFrames.size() - 1; ++index)
         {
             if (animationTime < keyFrames[index + 1].timeStamp)
@@ -72,7 +71,10 @@ static void getPoseGPU(Animation& animation, Bone& bone, float animationTime, st
         float timeStamp1 = currentKeyFrame.timeStamp;
         float timeStamp2 = nextKeyFrame.timeStamp;
         float progression = (animationTime - timeStamp1) / (timeStamp2 - timeStamp1);
-
+        if (timeStamp1 > animationTime)
+        {
+            progression = 0; // Happens when first timeStamp > 0
+        }
         Transformation newTransform = Transformation::interpolate(currentKeyFrame.transform, nextKeyFrame.transform, progression);
 
         globalTransform = parentTransform * newTransform.toTransformMatrix();
@@ -136,8 +138,6 @@ static AnimPackage initGPU(const aiScene* scene, aiMesh* mesh)
     loadAnimation(scene, skeleton, animation);
 
     Vao vao = createVertexArrayGPU(vertices, indices);
-    
-    Texture diffuseTexture = Texture("diffuse.png");
 
     Shader shader("V_shader.glsl", "F_shader.glsl");
 
@@ -145,5 +145,5 @@ static AnimPackage initGPU(const aiScene* scene, aiMesh* mesh)
     shader.loadInt("diff_texture", 0);
     shader.stop();
 
-    return AnimPackage(shader, vao, diffuseTexture, animation, skeleton, boneCount, globalInverseTransform);
+    return AnimPackage(shader, vao, animation, skeleton, boneCount, globalInverseTransform);
 }

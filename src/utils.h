@@ -52,7 +52,7 @@ struct FreeCamera
 	glm::vec3 _world_up = glm::vec3(0.f, 1.f, 0.f);
 	float _yaw = -90.f;
 	float _pitch = 0.f;
-	float _movement_speed = 0.5f;
+	float _movement_speed = 0.2f;
 	float _mouse_sensitivity = 0.1f;
 	float _zoom = -65.f;
 
@@ -128,8 +128,8 @@ struct AppState
 
 struct AnimPackage
 {
-	AnimPackage(Shader s, Vao v, Texture t, Animation a, Bone b, int c, glm::mat4 g = glm::mat4(1)) :
-		shader(s), vao(v), texture(t), animation(a), skeleton(b), boneCount(c), globalInvTr(g)
+	AnimPackage(Shader s, Vao v, Animation a, Bone b, int c, glm::mat4 g = glm::mat4(1)) :
+		shader(s), vao(v), texture(Texture::DEFAULT()), animation(a), skeleton(b), boneCount(c), globalInvTr(g)
 	{}
 
 	Shader shader;
